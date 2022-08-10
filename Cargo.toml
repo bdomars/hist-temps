@@ -10,4 +10,4 @@ reqwest = { version = "0.11.11", features = ["blocking"] }
 regex = "1"
 chrono = "0.4.21"
 tokio = { version = "1", features = ["full"] }
-clap = "3.2.16"
+clap = { version = "3.2.16", features = ["derive"] }
