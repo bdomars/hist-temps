@@ -3,20 +3,22 @@ use regex::Regex;
 
 #[derive(Debug)]
 pub struct Datapoint {
-    timestamp: DateTime<Utc>,
-    value: f64,
+    pub timestamp: DateTime<Utc>,
+    pub value: f64,
 }
 
 pub struct Temperatures {
     client: reqwest::Client,
+    place: String,
 }
 
 const FMI_URL: &str = "https://opendata.fmi.fi/wfs";
 
 impl Temperatures {
-    pub fn new() -> Temperatures {
+    pub fn new(place: &str) -> Temperatures {
         Temperatures {
             client: reqwest::Client::new(),
+            place: place.to_string(),
         }
     }
 
@@ -36,7 +38,7 @@ impl Temperatures {
                 "fmi::observations::weather::hourly::timevaluepair".to_string(),
             ),
             ("parameters", "temperature".to_string()),
-            ("place", "Turku".to_string()),
+            ("place", self.place.clone()),
         ];
 
         let req = self.client.get(FMI_URL).query(&params);
