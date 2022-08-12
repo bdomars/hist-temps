@@ -1,0 +1,7 @@
+ARG CROSS_BASE_IMAGE
+FROM $CROSS_BASE_IMAGE
+
+RUN dpkg --add-architecture arm64 && \
+	    apt-get update && \
+	    apt-get install --assume-yes libssl-dev libssl-dev:arm64 pkg-config
+        
