@@ -1,8 +1,5 @@
 use clap::Parser;
 use hist_temps::fmi;
-use influxdb2::models::DataPoint;
-use influxdb2::Client;
-use tokio_stream as stream;
 
 #[derive(Parser, Debug)]
 #[clap(author, version, about)]
@@ -34,25 +31,26 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let end_time = args.endtime.parse()?;
     let data = tempdata.fetch(start_time, end_time).await?;
 
-    let host = std::env::var("INFLUXDB_HOST").expect("env variable INFLUXDB_HOST");
-    let org = std::env::var("INFLUXDB_ORG").expect("env variable INFLUXDB_ORG");
-    let token = std::env::var("INFLUXDB_TOKEN").expect("env variable INFLUXDB_TOKEN");
-    let bucket = "fmi";
-    let client = Client::new(host, org, token);
+    if args.write_influxdb {
+        use influxdb2::models::DataPoint;
+        use influxdb2::Client;
+        use tokio_stream as stream;
 
-    let points: Vec<DataPoint> = data
-        .into_iter()
-        .map(|dp| {
+        let host = std::env::var("INFLUXDB_HOST").expect("env variable INFLUXDB_HOST");
+        let org = std::env::var("INFLUXDB_ORG").expect("env variable INFLUXDB_ORG");
+        let token = std::env::var("INFLUXDB_TOKEN").expect("env variable INFLUXDB_TOKEN");
+        let bucket = "fmi";
+        let client = Client::new(host, org, token);
+
+        let points = data.into_iter().map(|dp| {
             DataPoint::builder("measurement")
                 .tag("place", "Turku")
                 .field("temperature", dp.value)
                 .timestamp(dp.timestamp.timestamp_nanos())
                 .build()
                 .unwrap()
-        })
-        .collect();
+        });
 
-    if args.write_influxdb {
         client.write(bucket, stream::iter(points)).await?;
     }
 
