@@ -52,6 +52,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         });
 
         client.write(bucket, stream::iter(points)).await?;
+    } else {
+        println!("Got data:\n\n{:?}", data);
     }
 
     Ok(())
