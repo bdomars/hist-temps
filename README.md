@@ -1,5 +1,5 @@
 # hist-temps
-Fetch historical temperature data from FMI
+Fetch historical temperature data from FMI's overly complicated WFS endpoint for Open Data availability.
 
 Hihly specialized (read: hardcoded) app to run on our office pi and periodically fetch outside air temperature to
 our air quality monitoring solution. Currently expects to fetch all data to a bucket called 'fmi' in Influxdb2.
