@@ -26,7 +26,7 @@ impl Temperatures {
         &self,
         start_time: DateTime<Utc>,
         end_time: DateTime<Utc>,
-    ) -> Result<Vec<Datapoint>, Box<dyn std::error::Error>> {
+    ) -> Result<Box<dyn Iterator<Item = Datapoint>>, Box<dyn std::error::Error>> {
         let params = [
             ("starttime", start_time.to_rfc3339()),
             ("endtime", end_time.to_rfc3339()),
@@ -45,15 +45,23 @@ impl Temperatures {
         let resp = req.send().await?.text().await?;
 
         let tvp_regex = Regex::new(r"<wml2:MeasurementTVP>\s*?<wml2:time>(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z)</wml2:time>\s*?<wml2:value>(\d+\.\d)</wml2:value>\s*?</wml2:MeasurementTVP>").unwrap();
-        let mut res = Vec::new();
+        // let mut res = Vec::new();
 
-        for cap in tvp_regex.captures_iter(resp.as_str()) {
-            res.push(Datapoint {
-                timestamp: cap[1].parse()?,
-                value: cap[2].parse()?,
+        // for cap in tvp_regex.captures_iter(resp.as_str()) {
+        //     res.push(Datapoint {
+        //         timestamp: cap[1].parse()?,
+        //         value: cap[2].parse()?,
+        //     })
+        // }
+        let res = tvp_regex
+            .captures_iter(&resp)
+            .map(|c| Datapoint {
+                timestamp: c[1].parse().unwrap(),
+                value: c[2].parse().unwrap(),
             })
-        }
+            .collect::<Vec<Datapoint>>()
+            .into_iter();
 
-        Ok(res)
+        Ok(Box::new(res))
     }
 }

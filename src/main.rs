@@ -42,7 +42,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         let bucket = "fmi";
         let client = Client::new(host, org, token);
 
-        let points = data.into_iter().map(|dp| {
+        let points = data.map(|dp| {
             DataPoint::builder("measurement")
                 .tag("place", "Turku")
                 .field("temperature", dp.value)
