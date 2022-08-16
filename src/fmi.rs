@@ -1,3 +1,4 @@
+use anyhow::Result;
 use chrono::prelude::*;
 use regex::Regex;
 
@@ -26,7 +27,7 @@ impl Temperatures {
         &self,
         start_time: DateTime<Utc>,
         end_time: DateTime<Utc>,
-    ) -> Result<Vec<Datapoint>, Box<dyn std::error::Error>> {
+    ) -> Result<Vec<Datapoint>> {
         let params = [
             ("starttime", start_time.to_rfc3339()),
             ("endtime", end_time.to_rfc3339()),

@@ -1,3 +1,4 @@
+use anyhow::Result;
 use clap::Parser;
 use hist_temps::fmi;
 
@@ -24,7 +25,7 @@ struct Args {
 }
 
 #[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
+async fn main() -> Result<()> {
     let args = Args::parse();
     let tempdata = fmi::Temperatures::new(&args.place);
     let start_time = args.starttime.parse()?;
