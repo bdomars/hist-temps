@@ -1,4 +1,5 @@
 use anyhow::Result;
+use chrono::{DateTime, Duration, Utc};
 use clap::Parser;
 use hist_temps::fmi;
 
@@ -22,15 +23,30 @@ struct Args {
     #[clap(short, long)]
     /// Timestamp in ISO 8601
     endtime: String,
+
+    #[clap(long)]
+    /// Generate this many random data points instead of fetching from FMI
+    random_count: Option<usize>,
 }
 
 #[tokio::main]
 async fn main() -> Result<()> {
     let args = Args::parse();
     let tempdata = fmi::Temperatures::new(&args.place);
-    let start_time = args.starttime.parse()?;
-    let end_time = args.endtime.parse()?;
-    let data = tempdata.fetch(start_time, end_time).await?;
+    let start_time: DateTime<Utc> = args.starttime.parse()?;
+    let end_time: DateTime<Utc> = args.endtime.parse()?;
+
+    let data = if let Some(count) = args.random_count {
+        let datapoints = generate_random_datapoints(start_time, count);
+        println!(
+            "Generated {} random datapoints starting at {}",
+            datapoints.len(),
+            start_time
+        );
+        datapoints
+    } else {
+        tempdata.fetch(start_time, end_time).await?
+    };
 
     if args.write_influxdb {
         use influxdb2::models::DataPoint;
@@ -58,4 +74,20 @@ async fn main() -> Result<()> {
     }
 
     Ok(())
+}
+
+fn generate_random_datapoints(start: DateTime<Utc>, count: usize) -> Vec<fmi::Datapoint> {
+    use rand::Rng;
+
+    if count == 0 {
+        return Vec::new();
+    }
+
+    let mut rng = rand::thread_rng();
+    (0..count)
+        .map(|offset| fmi::Datapoint {
+            timestamp: start + Duration::hours(offset as i64),
+            value: rng.gen_range(-25.0..35.0),
+        })
+        .collect()
 }

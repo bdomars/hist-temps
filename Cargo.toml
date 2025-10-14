@@ -8,10 +8,11 @@ authors = ["bdomars <bdomars@0xbd.fi>"]
 
 [dependencies]
 reqwest = { version = "0.11.11", features = ["blocking"] }
-regex = "1"
 chrono = "0.4.21"
 tokio = { version = "1", features = ["full"] }
 clap = { version = "3.2.16", features = ["derive", "env"] }
 tokio-stream = "0.1.9"
 influxdb2 = "0.1.1"
 anyhow = "1"
+rand = "0.8"
+quick-xml = "0.31"
