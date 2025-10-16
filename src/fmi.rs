@@ -32,7 +32,7 @@ impl Temperatures {
         start_time: DateTime<Utc>,
         end_time: DateTime<Utc>,
     ) -> Result<Vec<Datapoint>> {
-        let mut parameters = vec![
+        let parameters = vec![
             ("starttime".to_string(), start_time.to_rfc3339()),
             ("endtime".to_string(), end_time.to_rfc3339()),
             ("place".to_string(), self.place.clone()),
@@ -41,22 +41,18 @@ impl Temperatures {
         // Attempt request without explicit parameter filtering; FMI now rejects legacy `parameters=temperature`.
         let response_primary = self
             .wfs
-            .get_feature("fmi::observations::weather::hourly::timevaluepair", &parameters)
+            .get_feature(
+                "fmi::observations::weather::hourly::timevaluepair",
+                &parameters,
+            )
             .await;
 
-        let mut response = response_primary;
+        let response = response_primary;
 
-        if let Err(err) = &response {
-            // Older deployments still accept the `parameters` argument; try again for backwards compatibility.
-            parameters.push(("parameters".to_string(), "temperature".to_string()));
-            response = self
-                .wfs
-                .get_feature(
-                    "fmi::observations::weather::hourly::timevaluepair",
-                    &parameters,
-                )
-                .await
-                .with_context(|| format!("retry with parameters failed after initial error: {err}"));
+        if let Ok(xml) = &response {
+            if let Err(err) = tokio::fs::write("fmi_initial_response.xml", xml).await {
+                eprintln!("failed to dump initial FMI response: {err}");
+            }
         }
 
         let xml = response?;
@@ -125,65 +121,59 @@ fn parse_temperature_timeseries(xml: &str) -> Result<Vec<Datapoint>> {
 
     loop {
         match reader.read_event_into(&mut buf) {
-            Ok(Event::Start(ref e)) => {
-                match e.local_name().as_ref() {
-                    b"MeasurementTimeseries" => {
-                        let hint_match = is_temperature_timeseries(e.attributes());
-                        in_temperature_series = hint_match || upcoming_temperature_series;
-                        upcoming_temperature_series = false;
+            Ok(Event::Start(ref e)) => match e.local_name().as_ref() {
+                b"MeasurementTimeseries" => {
+                    let hint_match = is_temperature_timeseries(e.attributes());
+                    in_temperature_series = hint_match || upcoming_temperature_series;
+                    upcoming_temperature_series = false;
+                }
+                b"MeasurementTVP" => {
+                    current_time = None;
+                }
+                b"time" if in_temperature_series => {
+                    let text = reader
+                        .read_text(e.name())
+                        .context("failed to read time value from FMI WFS response")?;
+                    let timestamp = DateTime::parse_from_rfc3339(text.trim())
+                        .with_context(|| format!("invalid timestamp in FMI WFS response: {text}"))?
+                        .with_timezone(&Utc);
+                    current_time = Some(timestamp);
+                }
+                b"value" if in_temperature_series => {
+                    let text = reader
+                        .read_text(e.name())
+                        .context("failed to read measurement value from FMI WFS response")?;
+                    let trimmed = text.trim();
+                    if trimmed.eq_ignore_ascii_case("nan") || trimmed.is_empty() {
+                        continue;
                     }
-                    b"MeasurementTVP" => {
-                        current_time = None;
-                    }
-                    b"time" if in_temperature_series => {
-                        let text = reader
-                            .read_text(e.name())
-                            .context("failed to read time value from FMI WFS response")?;
-                        let timestamp = DateTime::parse_from_rfc3339(text.trim())
-                            .with_context(|| {
-                                format!("invalid timestamp in FMI WFS response: {text}")
-                            })?
-                            .with_timezone(&Utc);
-                        current_time = Some(timestamp);
-                    }
-                    b"value" if in_temperature_series => {
-                        let text = reader
-                            .read_text(e.name())
-                            .context("failed to read measurement value from FMI WFS response")?;
-                        let trimmed = text.trim();
-                        if trimmed.eq_ignore_ascii_case("nan") || trimmed.is_empty() {
-                            continue;
-                        }
-                        let value: f64 = trimmed.parse().with_context(|| {
-                            format!("invalid temperature value in FMI WFS response: {trimmed}")
-                        })?;
+                    let value: f64 = trimmed.parse().with_context(|| {
+                        format!("invalid temperature value in FMI WFS response: {trimmed}")
+                    })?;
 
-                        if let Some(timestamp) = current_time {
-                            datapoints.push(Datapoint { timestamp, value });
-                        }
+                    if let Some(timestamp) = current_time {
+                        datapoints.push(Datapoint { timestamp, value });
                     }
-                    b"observedProperty" => {
-                        if let Ok(text) = reader.read_text(e.name()) {
-                            let needle = text.trim().to_lowercase();
-                            upcoming_temperature_series =
-                                needle.contains("temperature") || needle.contains("airtemp");
-                        }
-                    }
-                    _ => {}
                 }
-            }
-            Ok(Event::End(ref e)) => {
-                match e.local_name().as_ref() {
-                    b"MeasurementTimeseries" => {
-                        in_temperature_series = false;
-                        upcoming_temperature_series = false;
+                b"observedProperty" => {
+                    if let Ok(text) = reader.read_text(e.name()) {
+                        let needle = text.trim().to_lowercase();
+                        upcoming_temperature_series =
+                            needle.contains("temperature") || needle.contains("airtemp");
                     }
-                    b"MeasurementTVP" => {
-                        current_time = None;
-                    }
-                    _ => {}
                 }
-            }
+                _ => {}
+            },
+            Ok(Event::End(ref e)) => match e.local_name().as_ref() {
+                b"MeasurementTimeseries" => {
+                    in_temperature_series = false;
+                    upcoming_temperature_series = false;
+                }
+                b"MeasurementTVP" => {
+                    current_time = None;
+                }
+                _ => {}
+            },
             Ok(Event::Eof) => break,
             Ok(_) => {}
             Err(err) => {
